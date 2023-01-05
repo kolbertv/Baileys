@@ -54,6 +54,10 @@ export type BaileysEventMap = {
     'blocklist.update': { blocklist: string[], type: 'add' | 'remove' }
     /** Receive an update on a call, including when the call was received, rejected, accepted */
     'call': WACallEvent[]
+    'label.add': {name: string, id: string, color: number}
+    'label.remove': {id: string}
+    'label-association.add': { labelId: string, chatId: string }
+    'label-association.remove': { labelId: string, chatId: string }
 }
 
 export type BufferedEventData = {

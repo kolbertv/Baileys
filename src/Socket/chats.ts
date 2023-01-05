@@ -1,6 +1,7 @@
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { PROCESSABLE_HISTORY_TYPES } from '../Defaults'
+import { labelStore } from '../Store'
 import { ALL_WA_PATCH_NAMES, ChatModification, ChatMutation, LTHashState, MessageUpsertType, PresenceData, SocketConfig, WABusinessHoursConfig, WABusinessProfile, WAMediaUpload, WAMessage, WAPatchCreate, WAPatchName, WAPresence } from '../Types'
 import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncdSnapshot, encodeSyncdPatch, extractSyncdPatches, generateProfilePicture, getHistoryMsg, newLTHashState, processSyncAction } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
@@ -841,6 +842,18 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		}
 	})
 
+	const getLabels = () => {
+		return labelStore.getLabels()
+	}
+
+	const setLabels = async({ labelsId, chatsId }: {labelsId: Array<string>, chatsId: Array<string>}) => {
+		for(const chatId of chatsId) {
+			for(const labelId of labelsId) {
+				await chatModify({ labelAssociation: { type: 'add', labelId } }, chatId)
+			}
+		}
+	}
+
 	return {
 		...sock,
 		processingMutex,
@@ -859,6 +872,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		updateBlockStatus,
 		getBusinessProfile,
 		resyncAppState,
-		chatModify
+		chatModify,
+		getLabels,
+		setLabels
 	}
 }
