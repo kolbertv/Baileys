@@ -1,16 +1,17 @@
 import { Boom } from '@hapi/boom'
 import makeWASocket, { AnyMessageContent, delay, DisconnectReason, fetchLatestBaileysVersion, isJidBroadcast, makeCacheableSignalKeyStore, makeInMemoryStore, MessageRetryMap, useMultiFileAuthState } from '../src'
+import { labelStore } from '../src'
 import MAIN_LOGGER from '../src/Utils/logger'
 
-const logger = MAIN_LOGGER.child({ })
-logger.level = 'trace'
+const logger = MAIN_LOGGER.child({})
+logger.level = 'info'
 
 const useStore = !process.argv.includes('--no-store')
 const doReplies = !process.argv.includes('--no-reply')
 
 // external map to store retry counts of messages when decryption/encryption fails
 // keep this out of the socket itself, so as to prevent a message decryption/encryption loop across socket restarts
-const msgRetryCounterMap: MessageRetryMap = { }
+const msgRetryCounterMap: MessageRetryMap = {}
 
 // the store maintains the data of the WA connection in memory
 // can be written out to a file & read from it
@@ -32,11 +33,7 @@ const startSock = async() => {
 		version,
 		logger,
 		printQRInTerminal: true,
-		auth: {
-			creds: state.creds,
-			/** caching makes the store faster to send/recv messages */
-			keys: makeCacheableSignalKeyStore(state.keys, logger),
-		},
+		auth: state,
 		msgRetryCounterMap,
 		generateHighQualityLinkPreview: true,
 		// ignore all broadcast messages -- to receive the same
@@ -56,22 +53,25 @@ const startSock = async() => {
 		}
 	})
 
-	store?.bind(sock.ev)
+	// store?.bind(sock.ev)
+	// const sendMessageWTyping = async(msg: AnyMessageContent, jid: string) => {
+	// 	await sock.presenceSubscribe(jid)
+	// 	await delay(500)
 
-	const sendMessageWTyping = async(msg: AnyMessageContent, jid: string) => {
-		await sock.presenceSubscribe(jid)
-		await delay(500)
+	// 	await sock.sendPresenceUpdate('composing', jid)
+	// 	await delay(2000)
 
-		await sock.sendPresenceUpdate('composing', jid)
-		await delay(2000)
+	// 	await sock.sendPresenceUpdate('paused', jid)
 
-		await sock.sendPresenceUpdate('paused', jid)
-
-		await sock.sendMessage(jid, msg)
-	}
+	// 	await sock.sendMessage(jid, msg)
+	// }
 
 	// the process function lets you process all events that just occurred
 	// efficiently in a batch
+
+	// Подключили стор для хранения ярлыков и их ассоциаций
+	labelStore.bind(sock.ev)
+
 	sock.ev.process(
 		// events is a map for event name => event data
 		async(events) => {
@@ -113,12 +113,20 @@ const startSock = async() => {
 				console.log('recv messages ', JSON.stringify(upsert, undefined, 2))
 
 				if(upsert.type === 'notify') {
-					for(const msg of upsert.messages) {
-						if(!msg.key.fromMe && doReplies) {
-							console.log('replying to', msg.key.remoteJid)
-							await sock!.readMessages([msg.key])
-							await sendMessageWTyping({ text: 'Hello there!' }, msg.key.remoteJid!)
-						}
+
+					const text = upsert.messages[0].message?.extendedTextMessage?.text
+					if(text?.toLowerCase() === 'labels') {
+
+						// Пример использования getLabels(), в чате в ватсапе надо написать labels и пришлет все ярылки
+						await sock.sendMessage(upsert.messages[0].key.remoteJid!, { text: JSON.stringify(sock.getLabels()) })
+					}
+
+					// Пример использования setLabels(), в чате в ватсапе надо написать айди ярлыка и он присвоится этомуже чату
+					if(Number(text).toString() === text) {
+						await sock.setLabels({
+							labelsId: [text],
+							chatsId: [upsert.messages[0].key.remoteJid as string],
+						})
 					}
 				}
 			}
